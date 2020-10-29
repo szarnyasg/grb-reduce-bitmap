@@ -3,7 +3,7 @@
 ## Requirements
 
 Use the `master` branches of:
-- SuiteSparse:GraphBLAS (v4.0.0draft)
+- SuiteSparse:GraphBLAS (v4.0.0draft5)
 - LAGraph
 
 ## Build and test
