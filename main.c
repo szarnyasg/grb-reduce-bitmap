@@ -57,10 +57,10 @@ int main() {
     GrB_Vector_build(v, indices, indices, nvals, GrB_PLUS_UINT64);
 
     GrB_Vector w = NULL;
-    GrB_Vector_new(&w, GrB_UINT8, n);
-    GrB_Vector_assign_UINT8(w, v, GrB_NULL, (uint8_t) 0, GrB_ALL, 0, GrB_NULL);
+    GrB_Vector_new(&w, GrB_UINT64, n);
+    GrB_Vector_assign_UINT64(w, v, GrB_NULL, 0, GrB_ALL, 0, GrB_NULL);
 
-    GrB_Matrix_reduce_Monoid(w, v, GrB_NULL, GrB_PLUS_MONOID_UINT8, emptyMatrix, GrB_NULL);
+    GrB_Matrix_reduce_Monoid(w, v, GrB_NULL, GrB_PLUS_MONOID_UINT64, emptyMatrix, GrB_NULL);
 
     // Cleanup
     LAGr_free(&v);
