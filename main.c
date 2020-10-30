@@ -27,7 +27,7 @@
 
 int main() {
     LAGraph_init();
-    GxB_Global_Option_set(GxB_BURBLE, true);
+//    GxB_Global_Option_set(GxB_BURBLE, true);
 
     // print version
     char *date, *compile_date, *compile_time;
