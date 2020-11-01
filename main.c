@@ -13,6 +13,8 @@
     /* TODO */                      \
 }
 
+// "!!" means that the operation is expected to be expensive
+
 void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
     if (comment_lower_limit == -1) {
         GrB_vxm(next, seen, NULL, GxB_ANY_PAIR_BOOL, frontier, Knows, GrB_DESC_RC);
@@ -22,51 +24,90 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Kno
         GxB_Scalar_setElement_INT64(limit, comment_lower_limit);
 
         // build selection matrix based on the frontier's content
-        GrB_Matrix Sel;
-        GrB_Matrix_new(&Sel, GrB_BOOL, numPersons, numPersons);
 
-        GrB_Index nvals1;
-        GrB_Vector_nvals(&nvals1, frontier);
-        GrB_Index *I = (GrB_Index*) (LAGraph_malloc(nvals1, sizeof(GrB_Index)));
-        bool *X = (bool*) (LAGraph_malloc(nvals1, sizeof(bool)));
+        // turn vector "frontier" into a selection matrix "FrontierSel"
+        GrB_Index numFrontierPersons;
+        GrB_Vector_nvals(&numFrontierPersons, frontier);
+        GrB_Index *I = (GrB_Index*) (LAGraph_malloc(numFrontierPersons, sizeof(GrB_Index)));
+        bool *X = (bool*) (LAGraph_malloc(numFrontierPersons, sizeof(bool)));
+        GrB_Index nvalsTmp = numFrontierPersons;
+        GrB_Vector_extractTuples(I, X, &nvalsTmp, frontier);
+        assert(numFrontierPersons == nvalsTmp);
 
-        GrB_Index nvals2 = nvals1;
-        GrB_Vector_extractTuples_BOOL(I, X, &nvals2, frontier);
-        assert(nvals1 == nvals2);
-        GrB_Matrix_build_BOOL(Sel, I, I, X, nvals1, GrB_LOR);
+        printf("-------------- start of performance bottleneck --------------\n");
+        GrB_Matrix CommentsOfFrontierPeople;
+        GrB_Matrix_new(&CommentsOfFrontierPeople, GrB_BOOL, numPersons, numComments);
 
-        GrB_Matrix M2;
-        GrB_Matrix_new(&M2, GrB_BOOL, numPersons, numComments);
-        GrB_mxm(M2, NULL, NULL, GxB_ANY_PAIR_BOOL, Sel, HasCreator, GrB_DESC_T1);
+        // <option1>: use selection matrix and mxm to extract row
+        printf(">>>>>>>>>>>>>>>>>>>> option 1\n");
+        GrB_Matrix FrontierSel;
+        GrB_Matrix_new(&FrontierSel, GrB_BOOL, numPersons, numPersons);        
+        GrB_Matrix_build(FrontierSel, I, I, X, numFrontierPersons, GrB_LOR);
+        printf(" !!");
+        GrB_mxm(CommentsOfFrontierPeople, NULL, NULL, GxB_ANY_PAIR_BOOL, FrontierSel, HasCreator, GrB_DESC_T1);
+        // </option1>
+
+        // <option2>: use extract on the transposed variant of HasCreator then assign the extracted matrix
+        GrB_Matrix CommentsOfFrontierPeopleExtracted2;
+        printf(">>>>>>>>>>>>>>>>>>>> option 2\n");
+        GrB_Matrix_new(&CommentsOfFrontierPeopleExtracted2, GrB_BOOL, numFrontierPersons, numComments);
+        printf(" !!");
+        GrB_Matrix_extract(CommentsOfFrontierPeopleExtracted2, NULL, NULL, HasCreator, I, numFrontierPersons, GrB_ALL, numComments, GrB_DESC_T0);
+        GrB_Matrix_assign(CommentsOfFrontierPeople, NULL, NULL, CommentsOfFrontierPeopleExtracted2, I, numFrontierPersons, GrB_ALL, numComments, NULL);
+        // </option2>
+
+        // <option3>: use extract on HasCreator then assign the transposed variant of the extracted matrix
+        printf(">>>>>>>>>>>>>>>>>>>> option 3\n");
+        GrB_Matrix CommentsOfFrontierPeopleExtracted3;
+        GrB_Matrix_new(&CommentsOfFrontierPeopleExtracted3, GrB_BOOL, numComments, numFrontierPersons);
+        printf(" !!");
+        GrB_Matrix_extract(CommentsOfFrontierPeopleExtracted3, NULL, NULL, HasCreator, GrB_ALL, numComments, I, numFrontierPersons, NULL);
+        GrB_Matrix_assign(CommentsOfFrontierPeople, NULL, NULL, CommentsOfFrontierPeopleExtracted3, I, numFrontierPersons, GrB_ALL, numComments, GrB_DESC_T0);
+        // </option3>
+
+        // <option4>: precompute HasCreator^T
+        printf(">>>>>>>>>>>>>>>>>>>> option 4\n");
+        GrB_Matrix HasCreatorT;
+        GrB_Matrix_new(&HasCreatorT, GrB_BOOL, numPersons, numComments);
+        printf(" !!");
+        GrB_transpose(HasCreatorT, NULL, NULL, HasCreator, NULL);
+        GrB_Matrix CommentsOfFrontierPeopleExtracted4;
+        GrB_Matrix_new(&CommentsOfFrontierPeopleExtracted4, GrB_BOOL, numFrontierPersons, numComments);
+        GrB_Matrix_extract(CommentsOfFrontierPeopleExtracted4, NULL, NULL, HasCreatorT, I, numFrontierPersons, GrB_ALL, numComments, NULL);
+        GrB_Matrix_assign(CommentsOfFrontierPeople, NULL, NULL, CommentsOfFrontierPeopleExtracted4, I, numFrontierPersons, GrB_ALL, numComments, NULL);
+        // </option4>
+
+        printf("--------------- end of performance bottleneck ---------------\n");
 
         // direction 1
-        GrB_Matrix M3a;
-        GrB_Matrix_new(&M3a, GrB_UINT64, numPersons, numComments);
-        GrB_mxm(M3a, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOf, NULL);
+        GrB_Matrix RepliesToCommentsOfFrontierPeople;
+        GrB_Matrix_new(&RepliesToCommentsOfFrontierPeople, GrB_UINT64, numPersons, numComments);
+        GrB_mxm(RepliesToCommentsOfFrontierPeople, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, CommentsOfFrontierPeople, ReplyOf, NULL);
 
-        GrB_Matrix Interactions1;
-        GrB_Matrix_new(&Interactions1, GrB_UINT64, numPersons, numPersons);
-        GrB_mxm(Interactions1, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3a, HasCreator, NULL);
+        GrB_Matrix InteractionsToComments;
+        GrB_Matrix_new(&InteractionsToComments, GrB_UINT64, numPersons, numPersons);
+        GrB_mxm(InteractionsToComments, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesToCommentsOfFrontierPeople, HasCreator, NULL);
 
         // direction 2
-        GrB_Matrix M3b;
-        GrB_Matrix_new(&M3b, GrB_UINT64, numPersons, numComments);
-        GrB_mxm(M3b, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOf, GrB_DESC_T1);
+        GrB_Matrix RepliesFromCommentsOfFrontierPeople;
+        GrB_Matrix_new(&RepliesFromCommentsOfFrontierPeople, GrB_UINT64, numPersons, numComments);
+        printf(" !!");
+        GrB_mxm(RepliesFromCommentsOfFrontierPeople, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, CommentsOfFrontierPeople, ReplyOf, GrB_DESC_T1);
 
-        GrB_Matrix Interactions2;
-        GrB_Matrix_new(&Interactions2, GrB_UINT64, numPersons, numPersons);
-        GrB_mxm(Interactions2, Interactions1, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3b, HasCreator, NULL);
+        GrB_Matrix InteractionsFromComments;
+        GrB_Matrix_new(&InteractionsFromComments, GrB_UINT64, numPersons, numPersons);
+        GrB_mxm(InteractionsFromComments, InteractionsToComments, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesFromCommentsOfFrontierPeople, HasCreator, NULL);
 
-        // Interactions1 = Interactions1 * Interactions2
-        GrB_Matrix_eWiseMult_BinaryOp(Interactions1, NULL, NULL, GrB_MIN_UINT64, Interactions1, Interactions2, NULL);
-        GxB_Matrix_select(Interactions1, NULL, NULL, GxB_GT_THUNK, Interactions1, limit, NULL);
-        GrB_Matrix_reduce_BinaryOp(next, NULL, NULL, GxB_PAIR_BOOL, Interactions1, GrB_DESC_T0);
+        // Interaction  sToComments = InteractionsToComments * InteractionsFromComments
+        GrB_eWiseMult(InteractionsToComments, InteractionsToComments, NULL, GrB_MIN_UINT64, InteractionsToComments, InteractionsFromComments, NULL);
+        GxB_select(InteractionsToComments, NULL, NULL, GxB_GT_THUNK, InteractionsToComments, limit, NULL);
+        GrB_reduce(next, NULL, NULL, GxB_PAIR_BOOL, InteractionsToComments, GrB_DESC_T0);
     }
 }
 
 int main() {
     LAGraph_init();
-//    GxB_Global_Option_set(GxB_BURBLE, true);
+    GxB_Global_Option_set(GxB_BURBLE, true);
 
     // print version
     char *date, *compile_date, *compile_time;
@@ -121,14 +162,14 @@ int main() {
     
     // init
 
-    GrB_Vector_setElement_BOOL(frontier1, true, p1);
-    GrB_Vector_setElement_BOOL(frontier2, true, p2);
+    GrB_Vector_setElement(frontier1, true, p1);
+    GrB_Vector_setElement(frontier2, true, p2);
     GrB_Vector_dup(&seen1, frontier1);
     GrB_Vector_dup(&seen2, frontier2);
 
     int distance = 0;
 
-    // measurem processing time using LAGraph_tic/toc
+    // measurem processing time using LAGraph_tic/-toc
     double tic [2] ;
     LAGraph_tic (tic) ;
 
@@ -146,7 +187,7 @@ int main() {
                 break;
             }
 
-            GrB_Vector_eWiseMult_BinaryOp(intersection1, NULL, NULL, GrB_LAND, next1, frontier2, NULL);
+            GrB_eWiseMult(intersection1, NULL, NULL, GrB_LAND, next1, frontier2, NULL);
 
             GrB_Index intersection1_nvals;
             GrB_Vector_nvals(&intersection1_nvals, intersection1);
@@ -158,7 +199,7 @@ int main() {
             // advance second wavefront
             advance_wavefront(HasCreator, ReplyOf, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
 
-            GrB_Vector_eWiseMult_BinaryOp(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
+            GrB_eWiseMult(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
 
             GrB_Index intersection2_nvals;
             GrB_Vector_nvals(&intersection2_nvals, intersection2);
@@ -174,8 +215,8 @@ int main() {
                 break;
             }
 
-            GrB_eWiseAdd_Vector_BinaryOp(seen1, NULL, NULL, GrB_LOR, seen1, next1, NULL);
-            GrB_eWiseAdd_Vector_BinaryOp(seen2, NULL, NULL, GrB_LOR, seen2, next2, NULL);
+            GrB_eWiseAdd(seen1, NULL, NULL, GrB_LOR, seen1, next1, NULL);
+            GrB_eWiseAdd(seen2, NULL, NULL, GrB_LOR, seen2, next2, NULL);
 
             GrB_Vector_dup(&frontier1, next1);
             GrB_Vector_dup(&frontier2, next2);
