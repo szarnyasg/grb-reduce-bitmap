@@ -25,6 +25,90 @@
     exit (info) ;                                                         \
 }
 
+
+void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix HasCreatorTransposed,  GrB_Matrix ReplyOf, GrB_Matrix ReplyOfTransposed,  GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index n, int64_t comment_lower_limit, GrB_Index NumComments) {
+    if (comment_lower_limit == -1) {
+        GrB_vxm(next, seen, NULL, GxB_ANY_PAIR_BOOL, frontier, Knows, GrB_DESC_RC);
+    } else {
+        GxB_Scalar limit;
+        GxB_Scalar_new(&limit, GrB_INT64);
+        GxB_Scalar_setElement_INT64(limit, comment_lower_limit);
+
+        // build selection matrix based on the frontier's content
+        GrB_Matrix Sel;
+        GrB_Matrix_new(&Sel, GrB_BOOL, n, n);
+
+        GrB_Index nvals1;
+        GrB_Vector_nvals(&nvals1, frontier);
+        GrB_Index *I = (GrB_Index*) (LAGraph_malloc(nvals1, sizeof(GrB_Index)));
+        bool *X = (bool*) (LAGraph_malloc(nvals1, sizeof(bool)));
+
+        GrB_Index nvals2 = nvals1;
+        GrB_Vector_extractTuples_BOOL(I, X, &nvals2, frontier);
+        assert(nvals1 == nvals2);
+        GrB_Matrix_build_BOOL(Sel, I, I, X, nvals1, GrB_LOR);
+
+        GrB_Matrix M2;
+        GrB_Matrix_new(&M2, GrB_BOOL, n, NumComments);
+        GrB_mxm(M2, NULL, NULL, GxB_ANY_PAIR_BOOL, Sel, HasCreatorTransposed, NULL);
+
+        // direction 1
+        GrB_Matrix M3a;
+        GrB_Matrix_new(&M3a, GrB_UINT64, n, NumComments);
+        GrB_mxm(M3a, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOf, NULL);
+
+        GrB_Matrix Interactions1;
+        GrB_Matrix_new(&Interactions1, GrB_UINT64, n, n);
+        GrB_mxm(Interactions1, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3a, HasCreator, NULL);
+
+
+#ifndef NDEBUG
+//            GxB_Matrix_fprint(Interactions1, "Interactions1 before select", GxB_SUMMARY, stdout);
+#endif
+//            GxB_Matrix_select(Interactions1, NULL, NULL, GxB_GT_THUNK, Interactions1, limit, NULL);
+#ifndef NDEBUG
+//            GxB_Matrix_fprint(Interactions1, "Interactions1 after select", GxB_SUMMARY, stdout);
+#endif
+
+        // direction 2
+        GrB_Matrix M3b;
+        GrB_Matrix_new(&M3b, GrB_UINT64, n, NumComments);
+        GrB_mxm(M3b, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOfTransposed, NULL);
+
+
+        GrB_Matrix Interactions2;
+        GrB_Matrix_new(&Interactions2, GrB_UINT64, n, n);
+        GrB_mxm(Interactions2, Interactions1, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3b, HasCreator, NULL);
+
+
+#ifndef NDEBUG
+        GxB_Matrix_fprint(Interactions2, "Interactions2 before select", GxB_SUMMARY, stdout);
+#endif
+#ifndef NDEBUG
+//            GxB_Matrix_fprint(Interactions2, "Interactions2 after select", GxB_SUMMARY, stdout);
+#endif
+
+
+//#ifndef NDEBUG
+//            GxB_Matrix_fprint(Sel, "Sel", GxB_SUMMARY, stdout);
+//            GxB_Matrix_fprint(M2, "M2", GxB_SUMMARY, stdout);
+//            GxB_Matrix_fprint(M3a, "M3a", GxB_SUMMARY, stdout);
+//            GxB_Matrix_fprint(M3b, "M3b", GxB_SUMMARY, stdout);
+//            GxB_Matrix_fprint(Interactions1, "Interactions1", GxB_SUMMARY, stdout);
+//            GxB_Matrix_fprint(Interactions2, "Interactions2", GxB_SUMMARY, stdout);
+//#endif
+
+        // Interactions1 = Interactions1 * Interactions2
+        GrB_Matrix_eWiseMult_BinaryOp(Interactions1, NULL, NULL, GrB_MIN_UINT64, Interactions1, Interactions2, NULL);
+        GxB_Matrix_select(Interactions1, NULL, NULL, GxB_GT_THUNK, Interactions1, limit, NULL);
+#ifndef NDEBUG
+//            GxB_Matrix_fprint(Interactions1, "Interactions final", GxB_SUMMARY, stdout);
+#endif
+        GrB_Matrix_reduce_BinaryOp(next, NULL, NULL, GxB_PAIR_BOOL, Interactions1, GrB_DESC_T0);
+
+    }
+}
+
 int main() {
     LAGraph_init();
 //    GxB_Global_Option_set(GxB_BURBLE, true);
@@ -42,20 +126,150 @@ int main() {
 
     LAGraph_set_nthreads(1);
 
-    GrB_Vector v = NULL;
-    GrB_Vector_new(&v, GrB_BOOL, 1073);
-    GrB_Vector_setElement(v, true, 3);
+    GrB_Matrix Knows, ReplyOf, HasCreator;
+    LAGraph_binread(&Knows, "../knows.grb");
+    LAGraph_binread(&ReplyOf, "../replyOf.grb");
+    LAGraph_binread(&HasCreator, "../hasCreator.grb");
 
-    GrB_Matrix M = NULL;
-    FILE* f = NULL;
-    f = fopen("../matrix.mm", "r");
-    LAGraph_mmread(&M, f);
+    GrB_Index NumComments;
+    GrB_Matrix_nrows(&NumComments, ReplyOf);
 
-    GxB_Vector_fprint(v, "v0", GxB_SUMMARY, stdout);
-    GrB_vxm(v, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, v, M, GrB_NULL);
-    GxB_Vector_fprint(v, "v1", GxB_SUMMARY, stdout);
-    GrB_vxm(v, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, v, M, GrB_NULL);
-    GxB_Vector_fprint(v, "v2", GxB_SUMMARY, stdout);
+    // GrB_Vector v = NULL;
+    // GrB_Vector_new(&v, GrB_BOOL, 1073);
+    // GrB_Vector_setElement(v, true, 3);
+
+    // GrB_Matrix M = NULL;
+    // FILE* f = NULL;
+    // f = fopen("../matrix.mm", "r");
+    // LAGraph_mmread(&M, f);
+
+    // GxB_Vector_fprint(v, "v0", GxB_SUMMARY, stdout);
+    // GrB_vxm(v, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, v, M, GrB_NULL);
+    // GxB_Vector_fprint(v, "v1", GxB_SUMMARY, stdout);
+    // GrB_vxm(v, GrB_NULL, GrB_NULL, GxB_ANY_PAIR_BOOL, v, M, GrB_NULL);
+    // GxB_Vector_fprint(v, "v2", GxB_SUMMARY, stdout);
+
+
+// #ifndef NDEBUG
+//         using namespace std::chrono;
+//         auto start1 = high_resolution_clock::now();
+// #endif
+
+// #ifndef NDEBUG
+//         auto duration1 = round<microseconds>(high_resolution_clock::now() - start1);
+//         auto start2 = high_resolution_clock::now();
+
+//         GxB_Matrix_fprint(A, "personToPersonFiltered", GxB_SUMMARY, stdout);
+// #endif
+
+    GrB_Index n;
+    GrB_Matrix_nrows(&n, Knows);
+
+    // hard-code input params for o1k data set
+
+    GrB_Index p1 = 319;
+    GrB_Index p2 = 809;
+    int64_t comment_lower_limit = 1;
+
+    // declare
+
+    GrB_Vector frontier1 = NULL;
+    GrB_Vector frontier2 = NULL;
+    GrB_Vector next1 = NULL;
+    GrB_Vector next2 = NULL;
+    GrB_Vector intersection1 = NULL;
+    GrB_Vector intersection2 = NULL;
+    GrB_Vector seen1 = NULL;
+    GrB_Vector seen2 = NULL;
+
+    // create
+
+    GrB_Vector_new(&frontier1, GrB_BOOL, n);
+    GrB_Vector_new(&frontier2, GrB_BOOL, n);
+    GrB_Vector_new(&next1, GrB_BOOL, n);
+    GrB_Vector_new(&next2, GrB_BOOL, n);
+    GrB_Vector_new(&intersection1, GrB_BOOL, n);
+    GrB_Vector_new(&intersection2, GrB_BOOL, n);
+    
+    // init
+
+    GrB_Vector_setElement_BOOL(frontier1, true, p1);
+    GrB_Vector_setElement_BOOL(frontier2, true, p2);
+    GrB_Vector_dup(&seen1, frontier1);
+    GrB_Vector_dup(&seen2, frontier2);
+
+    int distance;
+
+    if (p1 == p2) {
+        distance = 0;
+    } else {
+
+        GrB_Matrix HasCreatorTransposed, ReplyOfTransposed;
+        if (comment_lower_limit == -1) {
+            HasCreatorTransposed = NULL;
+            ReplyOfTransposed = NULL;
+        } else {
+            GrB_Matrix_new(&HasCreatorTransposed, GrB_UINT64, n, NumComments);
+            GrB_transpose(HasCreatorTransposed, NULL, NULL, HasCreator, NULL);
+            GrB_Matrix_new(&ReplyOfTransposed, GrB_UINT64, NumComments, NumComments);
+            GrB_transpose(ReplyOfTransposed, NULL, NULL, ReplyOf, NULL);
+        }
+
+        for (GrB_Index level = 1; level < n / 2 + 1; level++) {
+            advance_wavefront(HasCreator, HasCreatorTransposed, ReplyOf, ReplyOfTransposed, Knows, frontier1, next1, seen1, n, comment_lower_limit, NumComments);
+
+            GrB_Index next1nvals;
+            GrB_Vector_nvals(&next1nvals, next1);
+            if (next1nvals == 0) {
+                distance = -1;
+                break;
+            }
+
+            GrB_Vector_eWiseMult_BinaryOp(intersection1, NULL, NULL, GrB_LAND, next1, frontier2, NULL);
+
+            GrB_Index intersection1_nvals;
+            GrB_Vector_nvals(&intersection1_nvals, intersection1);
+            if (intersection1_nvals > 0) {
+                distance = level * 2 - 1;
+                break;
+            }
+
+//                GrB_vxm(next2, seen2, NULL, GxB_ANY_PAIR_BOOL, frontier2, A, GrB_DESC_RC);
+            advance_wavefront(HasCreator, HasCreatorTransposed, ReplyOf, ReplyOfTransposed, Knows, frontier2, next2, seen2, n, comment_lower_limit, NumComments);
+
+            GrB_Vector_eWiseMult_BinaryOp(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
+
+            GrB_Index intersection2_nvals;
+            GrB_Vector_nvals(&intersection2_nvals, intersection2);
+            if (intersection2_nvals > 0) {
+                distance = level * 2;
+                break;
+            }
+
+            GrB_Index next2nvals;
+            GrB_Vector_nvals(&next2nvals, next2);
+            if (next2nvals == 0) {
+                distance = -1;
+                break;
+            }
+
+            GrB_eWiseAdd_Vector_BinaryOp(seen1, NULL, NULL, GrB_LOR, seen1, next1, NULL);
+            GrB_eWiseAdd_Vector_BinaryOp(seen2, NULL, NULL, GrB_LOR, seen2, next2, NULL);
+
+            GrB_Vector_dup(&frontier1, next1);
+            GrB_Vector_dup(&frontier2, next2);
+        }
+    }
+
+// #ifndef NDEBUG
+//         auto duration2 = round<microseconds>(high_resolution_clock::now() - start2);
+//         std::cout << "induced subgraph: " << duration1.count()
+//                   << " bfs: "             << duration2.count() <<'\n';
+
+// //        GxB_Vector_fprint(v_output, "output_vec", GxB_SUMMARY, stdout);
+// #endif
+
+    printf("Distance: %d\n", distance);
 
     // Cleanup
     LAGraph_finalize();
