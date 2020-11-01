@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdio.h>
 #include <stdlib.h>
-#undef NDEBUG
 #include <assert.h>
 #include <string.h>
 
@@ -13,18 +12,6 @@
 {                                   \
     /* TODO */                      \
 }
-
-
-// override to exit on problem to use it in OpenMP region
-#undef LAGRAPH_ERROR
-#define LAGRAPH_ERROR(message,info)                                         \
-{                                                                           \
-    fprintf (stderr, "LAGraph error: %s\n[%d]\n%s\nFile: %s Line: %d\n",    \
-        message, info, GrB_error ( ), __FILE__, __LINE__) ;                 \
-    LAGRAPH_FREE_ALL ;                                                      \
-    exit (info) ;                                                         \
-}
-
 
 void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
     if (comment_lower_limit == -1) {
@@ -61,41 +48,19 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Kno
         GrB_Matrix_new(&Interactions1, GrB_UINT64, numPersons, numPersons);
         GrB_mxm(Interactions1, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3a, HasCreator, NULL);
 
-
-#ifndef NDEBUG
-//            GxB_Matrix_fprint(Interactions1, "Interactions1 before select", GxB_SUMMARY, stdout);
-#endif
-//            GxB_Matrix_select(Interactions1, NULL, NULL, GxB_GT_THUNK, Interactions1, limit, NULL);
-#ifndef NDEBUG
-//            GxB_Matrix_fprint(Interactions1, "Interactions1 after select", GxB_SUMMARY, stdout);
-#endif
-
         // direction 2
         GrB_Matrix M3b;
         GrB_Matrix_new(&M3b, GrB_UINT64, numPersons, numComments);
         GrB_mxm(M3b, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOf, GrB_DESC_T1);
 
-
         GrB_Matrix Interactions2;
         GrB_Matrix_new(&Interactions2, GrB_UINT64, numPersons, numPersons);
         GrB_mxm(Interactions2, Interactions1, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M3b, HasCreator, NULL);
 
-
-#ifndef NDEBUG
-//        GxB_Matrix_fprint(Interactions2, "Interactions2 before select", GxB_SUMMARY, stdout);
-#endif
-#ifndef NDEBUG
-//            GxB_Matrix_fprint(Interactions2, "Interactions2 after select", GxB_SUMMARY, stdout);
-#endif
-
         // Interactions1 = Interactions1 * Interactions2
         GrB_Matrix_eWiseMult_BinaryOp(Interactions1, NULL, NULL, GrB_MIN_UINT64, Interactions1, Interactions2, NULL);
         GxB_Matrix_select(Interactions1, NULL, NULL, GxB_GT_THUNK, Interactions1, limit, NULL);
-#ifndef NDEBUG
-//            GxB_Matrix_fprint(Interactions1, "Interactions final", GxB_SUMMARY, stdout);
-#endif
         GrB_Matrix_reduce_BinaryOp(next, NULL, NULL, GxB_PAIR_BOOL, Interactions1, GrB_DESC_T0);
-
     }
 }
 
@@ -163,15 +128,15 @@ int main() {
 
     int distance = 0;
 
+    // measurem processing time using LAGraph_tic/toc
     double tic [2] ;
     LAGraph_tic (tic) ;
 
     if (p1 == p2) {
         distance = 0;
     } else {
-
-
         for (GrB_Index level = 1; level < numPersons / 2 + 1; level++) {
+            // advance first wavefront
             advance_wavefront(HasCreator, ReplyOf, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
 
             GrB_Index next1nvals;
@@ -190,7 +155,7 @@ int main() {
                 break;
             }
 
-//                GrB_vxm(next2, seen2, NULL, GxB_ANY_PAIR_BOOL, frontier2, A, GrB_DESC_RC);
+            // advance second wavefront
             advance_wavefront(HasCreator, ReplyOf, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
 
             GrB_Vector_eWiseMult_BinaryOp(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
@@ -219,7 +184,7 @@ int main() {
     double elapsed = LAGraph_toc(tic);
 
     printf("Distance: %d\n", distance);
-    printf("Elased time %12.3f sec\n", elapsed);
+    printf("Processing time %12.3f sec\n", elapsed);
 
     // Cleanup
     LAGraph_finalize();
