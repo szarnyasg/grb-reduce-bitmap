@@ -26,7 +26,7 @@
 }
 
 
-void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix HasCreatorTransposed, GrB_Matrix ReplyOf, GrB_Matrix ReplyOfTransposed, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
+void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
     if (comment_lower_limit == -1) {
         GrB_vxm(next, seen, NULL, GxB_ANY_PAIR_BOOL, frontier, Knows, GrB_DESC_RC);
     } else {
@@ -50,7 +50,7 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix HasCreatorTransposed, G
 
         GrB_Matrix M2;
         GrB_Matrix_new(&M2, GrB_BOOL, numPersons, numComments);
-        GrB_mxm(M2, NULL, NULL, GxB_ANY_PAIR_BOOL, Sel, HasCreatorTransposed, NULL);
+        GrB_mxm(M2, NULL, NULL, GxB_ANY_PAIR_BOOL, Sel, HasCreator, GrB_DESC_T1);
 
         // direction 1
         GrB_Matrix M3a;
@@ -73,7 +73,7 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix HasCreatorTransposed, G
         // direction 2
         GrB_Matrix M3b;
         GrB_Matrix_new(&M3b, GrB_UINT64, numPersons, numComments);
-        GrB_mxm(M3b, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOfTransposed, NULL);
+        GrB_mxm(M3b, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, M2, ReplyOf, GrB_DESC_T1);
 
 
         GrB_Matrix Interactions2;
@@ -170,19 +170,9 @@ int main() {
         distance = 0;
     } else {
 
-        GrB_Matrix HasCreatorTransposed, ReplyOfTransposed;
-        if (comment_lower_limit == -1) {
-            HasCreatorTransposed = NULL;
-            ReplyOfTransposed = NULL;
-        } else {
-            GrB_Matrix_new(&HasCreatorTransposed, GrB_UINT64, numPersons, numComments);
-            GrB_transpose(HasCreatorTransposed, NULL, NULL, HasCreator, NULL);
-            GrB_Matrix_new(&ReplyOfTransposed, GrB_UINT64, numComments, numComments);
-            GrB_transpose(ReplyOfTransposed, NULL, NULL, ReplyOf, NULL);
-        }
 
         for (GrB_Index level = 1; level < numPersons / 2 + 1; level++) {
-            advance_wavefront(HasCreator, HasCreatorTransposed, ReplyOf, ReplyOfTransposed, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreator, ReplyOf, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
 
             GrB_Index next1nvals;
             GrB_Vector_nvals(&next1nvals, next1);
@@ -201,7 +191,7 @@ int main() {
             }
 
 //                GrB_vxm(next2, seen2, NULL, GxB_ANY_PAIR_BOOL, frontier2, A, GrB_DESC_RC);
-            advance_wavefront(HasCreator, HasCreatorTransposed, ReplyOf, ReplyOfTransposed, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreator, ReplyOf, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
 
             GrB_Vector_eWiseMult_BinaryOp(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
 
