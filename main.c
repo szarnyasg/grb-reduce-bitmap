@@ -123,7 +123,7 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Kno
         GrB_Matrix_new(&InteractionsFromComments, GrB_UINT64, numPersons, numPersons);
         GrB_mxm(InteractionsFromComments, InteractionsToComments, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesFromCommentsOfFrontierPeople, HasCreator, NULL);
 
-        // Interaction  sToComments = InteractionsToComments * InteractionsFromComments
+        // InteractionsToComments = InteractionsToComments * InteractionsFromComments
         GrB_eWiseMult(InteractionsToComments, InteractionsToComments, NULL, GrB_MIN_UINT64, InteractionsToComments, InteractionsFromComments, NULL);
         GxB_select(InteractionsToComments, NULL, NULL, GxB_GT_THUNK, InteractionsToComments, limit, NULL);
         GrB_reduce(next, NULL, NULL, GxB_PAIR_BOOL, InteractionsToComments, GrB_DESC_T0);
