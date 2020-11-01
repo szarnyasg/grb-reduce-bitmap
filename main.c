@@ -162,6 +162,9 @@ int main() {
 
     int distance = 0;
 
+    double tic [2] ;
+    LAGraph_tic (tic) ;
+
     if (p1 == p2) {
         distance = 0;
     } else {
@@ -222,8 +225,10 @@ int main() {
             GrB_Vector_dup(&frontier2, next2);
         }
     }
+    double elapsed = LAGraph_toc(tic);
 
     printf("Distance: %d\n", distance);
+    printf("Elased time %12.3f sec\n", elapsed);
 
     // Cleanup
     LAGraph_finalize();
