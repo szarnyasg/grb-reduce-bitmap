@@ -15,7 +15,7 @@
 
 // "!!" means that the operation is expected to be expensive
 
-void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
+void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix ReplyOfT, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
     if (comment_lower_limit == -1) {
         GrB_vxm(next, seen, NULL, GxB_ANY_PAIR_BOOL, frontier, Knows, GrB_DESC_RC);
     } else {
@@ -113,7 +113,7 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Kn
         GrB_Matrix RepliesFromCommentsOfFrontierPeople;
         GrB_Matrix_new(&RepliesFromCommentsOfFrontierPeople, GrB_UINT64, numPersons, numComments);
         printf(" ??");
-        GrB_mxm(RepliesFromCommentsOfFrontierPeople, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, CommentsOfFrontierPeople, ReplyOf, GrB_DESC_T1);
+        GrB_mxm(RepliesFromCommentsOfFrontierPeople, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, CommentsOfFrontierPeople, ReplyOfT, NULL);
 
         GrB_Matrix InteractionsFromComments;
         GrB_Matrix_new(&InteractionsFromComments, GrB_UINT64, numPersons, numPersons);
@@ -155,10 +155,12 @@ int main() {
     GrB_Matrix_nrows(&numPersons, Knows);
 
     GrB_Matrix HasCreatorT;
-    GrB_Matrix_nrows(&numComments, HasCreator);
-    GrB_Matrix_ncols(&numPersons, HasCreator);
     GrB_Matrix_new(&HasCreatorT, GrB_BOOL, numPersons, numComments);
     GrB_transpose(HasCreatorT, NULL, NULL, HasCreator, NULL);
+
+    GrB_Matrix ReplyOfT;
+    GrB_Matrix_new(&ReplyOfT, GrB_BOOL, numComments, numComments);
+    GrB_transpose(ReplyOfT, NULL, NULL, ReplyOf, NULL);
 
 
     // hard-coded input params
@@ -206,7 +208,7 @@ int main() {
     } else {
         for (GrB_Index level = 1; level < numPersons / 2 + 1; level++) {
             // advance first wavefront
-            advance_wavefront(HasCreatorT, ReplyOf, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
 
             GrB_Index next1nvals;
             GrB_Vector_nvals(&next1nvals, next1);
@@ -225,7 +227,7 @@ int main() {
             }
 
             // advance second wavefront
-            advance_wavefront(HasCreatorT, ReplyOf, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
 
             GrB_eWiseMult(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
 
