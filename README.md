@@ -6,6 +6,13 @@ Use the `?TODO?` branches of:
 - SuiteSparse:GraphBLAS (v4.0.0draft5)
 - LAGraph
 
+## Data
+
+```bash
+wget https://www.dropbox.com/s/dktnm1h5d1syxkw/p100k.zip
+unzip p100k.zip
+```
+
 ## Build and test
 
 ```bash

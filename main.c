@@ -127,10 +127,11 @@ int main() {
     GrB_Index numPersons;
     GrB_Matrix_nrows(&numPersons, Knows);
 
-    // hard-code input params for o1k data set
+    // hard-coded input params
+    // try to select persons who have a path between them with the prescribed comment_lower_limit
 
-    GrB_Index p1 = 319;
-    GrB_Index p2 = 809;
+    GrB_Index p1 = 31621;
+    GrB_Index p2 = 79481;
     int64_t comment_lower_limit = 1;
 
     // declare
