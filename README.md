@@ -1,8 +1,8 @@
-# Test project for SIGMOD2014 PC / Q3
+# Test project for SIGMOD2014 PC / Q1
 
 ## Requirements
 
-Use the `master` branches of:
+Use the `?TODO?` branches of:
 - SuiteSparse:GraphBLAS (v4.0.0draft5)
 - LAGraph
 
