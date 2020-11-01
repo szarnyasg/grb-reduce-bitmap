@@ -15,7 +15,7 @@
 
 // "!!" means that the operation is expected to be expensive
 
-void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix ReplyOfT, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
+void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix ReplyOfT, GrB_Matrix Knows, GrB_Vector frontier, GrB_Vector next, GrB_Vector seen, GrB_Index numPersons, GrB_Index numComments, int64_t comment_lower_limit) {
     if (comment_lower_limit == -1) {
         GrB_vxm(next, seen, NULL, GxB_ANY_PAIR_BOOL, frontier, Knows, GrB_DESC_RC);
     } else {
@@ -34,7 +34,7 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Re
         GrB_Vector_extractTuples(I, X, &nvalsTmp, frontier);
         assert(numFrontierPersons == nvalsTmp);
 
-        printf("-------------- start of performance bottleneck --------------\n");
+        // printf("-------------- start of performance bottleneck --------------\n");
         GrB_Matrix CommentsOfFrontierPeople;
         GrB_Matrix_new(&CommentsOfFrontierPeople, GrB_BOOL, numPersons, numComments);
 
@@ -79,7 +79,7 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Re
         // // </option3>
 
         // <option4>: precompute HasCreator^T, then do extract/assign
-        printf(">>>>>>>>>>>>>>>>>>>> option 4\n");
+        // printf(">>>>>>>>>>>>>>>>>>>> option 4\n");
         GrB_Matrix CommentsOfFrontierPeopleExtracted4;
         GrB_Matrix_new(&CommentsOfFrontierPeopleExtracted4, GrB_BOOL, numFrontierPersons, numComments);
         GrB_Matrix_extract(CommentsOfFrontierPeopleExtracted4, NULL, NULL, HasCreatorT, I, numFrontierPersons, GrB_ALL, numComments, NULL);
@@ -98,7 +98,7 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Re
         // GrB_mxm(CommentsOfFrontierPeople, NULL, NULL, GxB_ANY_PAIR_BOOL, FrontierSel2, HasCreatorT2, NULL);
         // // </option5>
 
-        printf("--------------- end of performance bottleneck ---------------\n");
+        // printf("--------------- end of performance bottleneck ---------------\n");
 
         // direction 1
         GrB_Matrix RepliesToCommentsOfFrontierPeople;
@@ -107,17 +107,16 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Re
 
         GrB_Matrix InteractionsToComments;
         GrB_Matrix_new(&InteractionsToComments, GrB_UINT64, numPersons, numPersons);
-        GrB_mxm(InteractionsToComments, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesToCommentsOfFrontierPeople, HasCreatorT, GrB_DESC_T1);
+        GrB_mxm(InteractionsToComments, Knows, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesToCommentsOfFrontierPeople, HasCreator, NULL);
 
         // direction 2
         GrB_Matrix RepliesFromCommentsOfFrontierPeople;
         GrB_Matrix_new(&RepliesFromCommentsOfFrontierPeople, GrB_UINT64, numPersons, numComments);
-        printf(" ??");
         GrB_mxm(RepliesFromCommentsOfFrontierPeople, NULL, NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, CommentsOfFrontierPeople, ReplyOfT, NULL);
 
         GrB_Matrix InteractionsFromComments;
         GrB_Matrix_new(&InteractionsFromComments, GrB_UINT64, numPersons, numPersons);
-        GrB_mxm(InteractionsFromComments, InteractionsToComments, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesFromCommentsOfFrontierPeople, HasCreatorT, GrB_DESC_T1);
+        GrB_mxm(InteractionsFromComments, InteractionsToComments, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, RepliesFromCommentsOfFrontierPeople, HasCreator, NULL);
 
         // InteractionsToComments = InteractionsToComments * InteractionsFromComments
         GrB_eWiseMult(InteractionsToComments, InteractionsToComments, NULL, GrB_MIN_UINT64, InteractionsToComments, InteractionsFromComments, NULL);
@@ -128,7 +127,7 @@ void advance_wavefront(GrB_Matrix HasCreatorT, GrB_Matrix ReplyOf, GrB_Matrix Re
 
 int main() {
     LAGraph_init();
-    GxB_Global_Option_set(GxB_BURBLE, true);
+    //GxB_Global_Option_set(GxB_BURBLE, true);
 
     // print version
     char *date, *compile_date, *compile_time;
@@ -208,7 +207,7 @@ int main() {
     } else {
         for (GrB_Index level = 1; level < numPersons / 2 + 1; level++) {
             // advance first wavefront
-            advance_wavefront(HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreator, HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier1, next1, seen1, numPersons, numComments, comment_lower_limit);
 
             GrB_Index next1nvals;
             GrB_Vector_nvals(&next1nvals, next1);
@@ -227,7 +226,7 @@ int main() {
             }
 
             // advance second wavefront
-            advance_wavefront(HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
+            advance_wavefront(HasCreator, HasCreatorT, ReplyOf, ReplyOfT, Knows, frontier2, next2, seen2, numPersons, numComments, comment_lower_limit);
 
             GrB_eWiseMult(intersection2, NULL, NULL, GrB_LAND, next1, next2, NULL);
 
