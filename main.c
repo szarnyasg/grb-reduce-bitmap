@@ -48,7 +48,6 @@ void advance_wavefront(GrB_Matrix HasCreator, GrB_Matrix ReplyOf, GrB_Matrix Kno
         GrB_Matrix_new(&CommentsOfFrontierPeopleT, GrB_BOOL, numComments, numPersons);
         GrB_mxm(CommentsOfFrontierPeopleT, NULL, NULL, GxB_ANY_PAIR_BOOL, HasCreator, FrontierSel0, NULL);
         GrB_transpose(CommentsOfFrontierPeople, NULL, NULL, CommentsOfFrontierPeopleT, NULL);
-        printf("\n");
         // </option0>
 
         // <option1>: use selection matrix and mxm to extract row
