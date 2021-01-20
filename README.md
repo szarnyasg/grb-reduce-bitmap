@@ -3,7 +3,7 @@
 ## Data
 
 ```bash
-wget https://www.dropbox.com/s/dktnm1h5d1syxkw/p100k.zip
+wget http://mit.bme.hu/~szarnyas/spc2014/data/p100k.zip
 unzip p100k.zip
 ```
 
